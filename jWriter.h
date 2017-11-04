@@ -9,6 +9,14 @@
 
 namespace abJSON
 {
+	class jData
+	{
+	public:
+		static std::pair<int, const char *>  *getArrayDelimiter();
+
+		static std::pair<int, const char *>  *getMapDelimiter();
+	};//{{2, ": "}, {2, ", "}, {0, ""}}}
+
 	template <typename STREAM_T, bool BINARY=false>
 	class jWriter
 	{
@@ -19,8 +27,8 @@ namespace abJSON
 		jWriter(STREAM_T *stream=nullptr)
 			: myStream(stream)
 			, myBytesWritten(0)
-			, ASCIIArrayDelim{1, {{2, ", "}, {0, ""}}}
-			, ASCIIMapDelim{2, {{2, ": "}, {2, ", "}, {0, ""}}}
+			, ASCIIArrayDelim(1, jData::getArrayDelimiter())
+			, ASCIIMapDelim(2, jData::getMapDelimiter())
 			, myAObjStack(nullptr)
 			, myAObjCur(nullptr)
 			, myAObjIndex(0)
@@ -28,6 +36,8 @@ namespace abJSON
 		}
 		~jWriter()
 		{
+			delete[] ASCIIArrayDelim.second;
+			delete[] ASCIIMapDelim.second;
 		}
 
 		/// Return the number of bytes written to the stream
@@ -45,7 +55,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return false;
+				return writeJtype(JTYPE::JNULL);
 			}
 			return writeString("null", 4);
 
@@ -56,9 +66,9 @@ namespace abJSON
 			{
 				if (v)
 				{
-					return writeJtype(JTYPE_TRUE);
+					return writeJtype(JTYPE::JTRUE);
 				}
-				return writeJtype(JTYPE_FALSE);
+				return writeJtype(JTYPE::JFALSE);
 			}
 			else
 			{
@@ -73,7 +83,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE_INT32) && writeBData(v);
+				return writeJtype(JTYPE::JINT32) && writeBData(v);
 			}
 			return writeValue("%" PRId32, v);
 		}
@@ -81,7 +91,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE_INT64) && writeBData(v);
+				return writeJtype(JTYPE::JINT64) && writeBData(v);
 			}
 			return writeValue("%" PRId64, v);
 		}
@@ -89,7 +99,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE_REAL32) && writeBData(v);
+				return writeJtype(JTYPE::JREAL32) && writeBData(v);
 			}
 			return writeValue("%g", v);
 		}
@@ -97,7 +107,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE_REAL64) && writeBData(v); 
+				return writeJtype(JTYPE::JREAL64) && writeBData(v); 
 			}
 			return writeValue("%g", v);
 		}
@@ -134,7 +144,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE_ARRAY_BEGIN);
+				return writeJtype(JTYPE::JARRAY_BEGIN);
 			}
 			myAObjStack->push_back(0);
 			myAObjCur = &ASCIIArrayDelim;
@@ -145,7 +155,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE_ARRAY_END);
+				return writeJtype(JTYPE::JARRAY_END);
 			}
 			return writeValue("]", 1) && popAObj();
 		}
@@ -153,7 +163,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE_MAP_BEGIN);
+				return writeJtype(JTYPE::JMAP_BEGIN);
 			}
 			myAObjStack->push_back(1);
 			myAObjCur = &ASCIIMapDelim;
@@ -164,7 +174,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE_MAP_END);
+				return writeJtype(JTYPE::JMAP_END);
 			}
 			return writeValue("}", 1) && popAObj();
 		}
@@ -261,7 +271,7 @@ namespace abJSON
 		bool    uniformArray(size_t size, const bool *array)
 		{
 			bool res = true;
-			res = res && beginUniformArray(size, JTYPE_BOOL);
+			res = res && beginUniformArray(size, JTYPE::JBOOL);
 			for (int i = 0; i < size; ++i)
 			{
 				res = res && uniformBoolean(array[i]);
@@ -271,7 +281,7 @@ namespace abJSON
 		bool    uniformArray(size_t size, const int8_t *array)
 		{
 			bool res = true;
-			res = res && beginUniformArray(size, JTYPE_INT8);
+			res = res && beginUniformArray(size, JTYPE::JINT8);
 			for (int i = 0; i < size; ++i)
 			{
 				res = res && uniformNumber(array[i]);
@@ -281,7 +291,7 @@ namespace abJSON
 		bool    uniformArray(size_t size, const int16_t *array)
 		{
 			bool res = true;
-			res = res && beginArray(size, JTYPE_INT16);
+			res = res && beginArray(size, JTYPE::JINT16);
 			for (int i = 0; i < size; ++i)
 			{
 				res = res && uniformNumber(array[i]);
@@ -291,7 +301,7 @@ namespace abJSON
 		bool    uniformArray(size_t size, const int32_t *array)
 		{
 			bool res = true;
-			res = res && beginArray(size, JTYPE_INT32);
+			res = res && beginArray(size, JTYPE::JINT32);
 			for (int i = 0; i < size; ++i)
 			{
 				res = res && uniformNumber(array[i]);
@@ -301,7 +311,7 @@ namespace abJSON
 		bool    uniformArray(size_t size, const int64_t *array)
 		{
 			bool res = true;
-			res = res && beginArray(size, JTYPE_INT64);
+			res = res && beginArray(size, JTYPE::JINT64);
 			for (int i = 0; i < size; ++i)
 			{
 				res = res && (array[i]);
@@ -311,7 +321,7 @@ namespace abJSON
 		bool    uniformArray(size_t size, const real32_t *array)
 		{
 			bool res = true;
-			res = res && beginArray(size, JTYPE_REAL32);
+			res = res && beginArray(size, JTYPE::JREAL32);
 			for (int i = 0; i < size; ++i)
 			{
 				res = res && uniformArray(array[i]);
@@ -321,7 +331,7 @@ namespace abJSON
 		bool    uniformArray(size_t size, const real64_t *array)
 		{
 			bool res = true;
-			res = res && beginArray(size, JTYPE_REAL64);
+			res = res && beginArray(size, JTYPE::JREAL64);
 			for (int i = 0; i < size; ++i)
 			{
 				res = res && uniformArray(array[i]);
@@ -335,10 +345,10 @@ namespace abJSON
 
 		// ASCII:
 
-		using DelimeterItem = std::pair<char, std::pair<int, const char *>[] >;
+		using DelimeterItem = std::pair<char, std::pair<int, const char *> *>;
 		
 		const DelimeterItem 	ASCIIArrayDelim;// (1, ((2, ", "), (0, "")));
-		const DelimeterItem 	ASCIIMapDelim;// (2, ((2, ": "), (2, ", "), (0, ""))); 
+		const DelimeterItem 	ASCIIMapDelim;// (2, ((2, ": "), (2, ", "), (0, "")));
 
 		// 0 for array, 1 for map
 		std::vector<int> 			*myAObjStack;
@@ -363,11 +373,9 @@ namespace abJSON
 		bool 	writeValue(const char *f, T v)
 		{
 			char buffer[128];
-			int delimLen = myAObjCur->second[myAObjIndex].first;
-			int len;
-
-			len = strcpy(buffer, myAObjCur->second[myAObjIndex].second);
-			len += snprintf(buffer+delimLen, 128-delimLen, f, v);
+			int len = myAObjCur->second[myAObjIndex].first;
+			strncpy(buffer, myAObjCur->second[myAObjIndex].second, len);
+			len += snprintf(buffer+len, 127-len, f, v);
 			myAObjIndex = (myAObjIndex + 1)%myAObjCur->first;
 
 			if (len < 128 && myStream && myStream->write(buffer, len))
@@ -401,7 +409,8 @@ namespace abJSON
 
 		bool 	writeJtype(JTYPE t)
 		{
-			if (myStream && myStream->write(t, 1))
+			static_assert(sizeof(JTYPE) == sizeof(char), "wrong size for JTYPE");
+			if (myStream && myStream->write((const char *)&t, sizeof(JTYPE)))
 			{
 				myBytesWritten++;
 				return true;
@@ -412,12 +421,17 @@ namespace abJSON
 		template <typename T>
 		bool 	writeBData(T v)
 		{
-			if (myStream && myStream->write(&v, size_of(v)))
+			if (myStream && myStream->write((const char *)&v, sizeof(v)))
 			{
-				myBytesWritten += size_of(v);
+				myBytesWritten += sizeof(v);
 				return true;
 			}
 			return false;
+		}
+
+		bool 	writeBString()
+		{
+
 		}
 	};
 }
