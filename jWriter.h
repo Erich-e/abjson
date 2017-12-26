@@ -1,11 +1,16 @@
-
 #include "jDefines.h"
 #include <inttypes.h>
+#include <limits>
+#include <map>
 #include <stdint.h>
 #include <stdio.h>
+#include <string>
 #include <unistd.h>
 #include <utility>
 #include <vector>
+
+
+#include <iostream>
 
 namespace abJSON
 {
@@ -15,7 +20,7 @@ namespace abJSON
 		static std::pair<int, const char *>  *getArrayDelimiter();
 
 		static std::pair<int, const char *>  *getMapDelimiter();
-	};//{{2, ": "}, {2, ", "}, {0, ""}}}
+	};
 
 	template <typename STREAM_T, bool BINARY=false>
 	class jWriter
@@ -23,16 +28,25 @@ namespace abJSON
 	public:
 		using real32_t = float;
 		using real64_t = double;
+		enum errorState {
+			NO_ERROR = 0,
+			INVALID_INPUT
+		};
 
 		jWriter(STREAM_T *stream=nullptr)
 			: myStream(stream)
 			, myBytesWritten(0)
+			, myErrorState(NO_ERROR)
 			, ASCIIArrayDelim(1, jData::getArrayDelimiter())
 			, ASCIIMapDelim(2, jData::getMapDelimiter())
-			, myAObjStack(nullptr)
 			, myAObjCur(nullptr)
 			, myAObjIndex(0)
+			, strCount(0)
 		{
+			if (BINARY)
+			{
+				writeJType(JTYPE::JMAGIC);
+			}
 		}
 		~jWriter()
 		{
@@ -55,10 +69,9 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE::JNULL);
+				return writeJType(JTYPE::JNULL);
 			}
-			return writeString("null", 4);
-
+			return writeValue("null", nullptr);
 		}
 		bool    boolean(bool v)
 		{
@@ -66,24 +79,34 @@ namespace abJSON
 			{
 				if (v)
 				{
-					return writeJtype(JTYPE::JTRUE);
+					return writeJType(JTYPE::JTRUE);
 				}
-				return writeJtype(JTYPE::JFALSE);
+				return writeJType(JTYPE::JFALSE);
 			}
 			else
 			{
 				if (v)
 				{
-					return writeString("true", 4);
+					return writeValue("true", nullptr);
 				}
-				return writeString("false", 5);
+				return writeValue("false", nullptr);
 			}
 		}
 		bool    number(int32_t v)
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE::JINT32) && writeBData(v);
+				if (isSmallInt<int16_t>(v))
+				{
+					if (isSmallInt<int8_t>(v))
+					{
+						return writeJType(JTYPE::JINT8)
+						       && writeBData(static_cast<int8_t>(v)); 
+					}
+					return writeJType(JTYPE::JINT16)
+						   && writeBData(static_cast<int16_t>(v));
+				}
+				return writeJType(JTYPE::JINT32) && writeBData(v);
 			}
 			return writeValue("%" PRId32, v);
 		}
@@ -91,7 +114,11 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE::JINT64) && writeBData(v);
+				if (isSmallInt<int32_t>(v))
+				{
+					return number(static_cast<int32_t>(v));	
+				}
+				return writeJType(JTYPE::JINT64) && writeBData(v);
 			}
 			return writeValue("%" PRId64, v);
 		}
@@ -99,7 +126,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE::JREAL32) && writeBData(v);
+				return writeJType(JTYPE::JREAL32) && writeBData(v);
 			}
 			return writeValue("%g", v);
 		}
@@ -107,23 +134,18 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE::JREAL64) && writeBData(v); 
+				return writeJType(JTYPE::JREAL64) && writeBData(v); 
 			}
 			return writeValue("%g", v);
 		}
 		bool    key(const char *v, int64_t len=-1)
 		{
-			if (len == -1)
-			{
-				len = strlen(v);
-			}
-			if (BINARY)
-			{
-				return false;
-			}
-			return writeString(v, len);
+			return string(v, len);
 		}
-		bool    keyToken(const char *v, int64_t len=-1);
+		bool    keyToken(const char *v, int64_t len=-1)
+		{
+			return stringToken(v, len);
+		}
 		bool    string(const char *v, int64_t len=-1)
 		{
 			if (len == -1)
@@ -132,11 +154,37 @@ namespace abJSON
 			}
 			if (BINARY)
 			{
-				return false;
+				return writeJType(JTYPE::JSTRING)
+					   && number(len)
+					   && writeBString(v, len);
 			}
 			return writeString(v, len);
 		}
-		bool    stingToken(const char *v, int64_t len=-1);
+		bool    stringToken(const char *v, int64_t len=-1)
+		{
+			if (len == -1)
+			{
+				len = strlen(v);
+			}
+			if (BINARY)
+			{
+				auto search = strTokens.find(v);
+				if(search == strTokens.end())
+				{
+					strTokens[v] = strCount;
+					strCount++;
+					return writeJType(JTYPE::JTOKENDEF)
+						   && number(strCount-1)
+						   && string(v, len);
+				}
+				else
+				{
+					return writeJType(JTYPE::JTOKENREF)
+						   && number(search->second);
+				}
+			}
+			return string(v, len);
+		}
 		/// @}
 
 		/// @{
@@ -144,39 +192,41 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE::JARRAY_BEGIN);
+				return writeJType(JTYPE::JARRAY_BEGIN);
 			}
-			myAObjStack->push_back(0);
+			bool res = writeValue("[", nullptr);
+			myAObjStack.push_back(0);
 			myAObjCur = &ASCIIArrayDelim;
 			myAObjIndex = 1;
-			return writeValue("[", 1);
+			return res;
 		}
 		bool    endArray()
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE::JARRAY_END);
+				return writeJType(JTYPE::JARRAY_END);
 			}
-			return writeValue("]", 1) && popAObj();
+			return writeValue("]", nullptr, false) && popAObj();
 		}
 		bool    beginMap()
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE::JMAP_BEGIN);
+				return writeJType(JTYPE::JMAP_BEGIN);
 			}
-			myAObjStack->push_back(1);
+			bool res = writeValue("{", nullptr);
+			myAObjStack.push_back(1);
 			myAObjCur = &ASCIIMapDelim;
-			myAObjIndex = 2;
-			return writeValue("{", 1);
+			myAObjIndex = 3;
+			return res;
 		}
 		bool    endMap()
 		{
 			if (BINARY)
 			{
-				return writeJtype(JTYPE::JMAP_END);
+				return writeJType(JTYPE::JMAP_END);
 			}
-			return writeValue("}", 1) && popAObj();
+			return writeValue("}", nullptr, false) && popAObj();
 		}
 		/// @}
 
@@ -185,7 +235,9 @@ namespace abJSON
 		{
 			if (BINARY) 
 			{
-				return false;
+				return writeJType(JTYPE::JUNIFORM_ARRAY)
+					   && writeJType(type)
+					   && number(size);
 			}
 			return beginArray();
 		}
@@ -193,7 +245,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return false;
+				return true;
 			}
 			return endArray();
 		}
@@ -212,7 +264,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return false;
+				return writeBData(v);
 			}
 			return number(static_cast<int32_t>(v));
 		}
@@ -220,7 +272,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return false;
+				return writeBData(v);
 			}
 			return number(static_cast<int32_t>(v));
 		}
@@ -228,7 +280,8 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return false;
+				// if (v < )
+				return writeBData(v);
 			}
 			return number(v);
 		}
@@ -236,7 +289,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return false;
+				return writeBData(v);
 			}
 			return number(v);
 		}
@@ -244,7 +297,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return false;
+				return writeBData(v);
 			}
 			return number(v);
 		}
@@ -252,7 +305,7 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return false;
+				return writeBData(v);
 			}
 			return number(v);
 		}
@@ -260,7 +313,11 @@ namespace abJSON
 		{
 			if (BINARY)
 			{
-				return false;
+				if (len == -1)
+				{
+					len = strlen(v);
+				}
+				return number(len) && writeBData(v);
 			}
 			return string(v, len);
 		}
@@ -339,9 +396,20 @@ namespace abJSON
 			return res && endUniformArray();
 		}
 		/// @}
+
+		/// State Functions
+		errorState getErrorState() {
+			return myErrorState;
+		}
+
+		explicit operator bool(){
+			return myErrorState != NO_ERROR;
+		}
+
 	private:
 		STREAM_T        *myStream;
 		size_t			myBytesWritten;
+		int myErrorState;
 
 		// ASCII:
 
@@ -351,33 +419,100 @@ namespace abJSON
 		const DelimeterItem 	ASCIIMapDelim;// (2, ((2, ": "), (2, ", "), (0, "")));
 
 		// 0 for array, 1 for map
-		std::vector<int> 			*myAObjStack;
+		std::vector<int> 			myAObjStack;
 		const DelimeterItem			*myAObjCur;
 		int 						myAObjIndex;
 
-		bool 	writeString(const char *data, size_t len)
+		// BINARY
+		int strCount = 0;
+		std::map<std::string, int> strTokens;
+
+		bool 	writeString(const char *data, size_t len, bool delim=true)
 		{
-			if (myStream 
-				&& myStream->write(myAObjCur->second[myAObjIndex].second,
-				                   myAObjCur->second[myAObjIndex].first) 
-				&& myStream->write(data, len))
+			char buffer[128];
+			int blen = 0;
+			bool res = true;
+			if (myStream)
 			{
-				myAObjIndex = (myAObjIndex + 1)%myAObjCur->first;
-				myBytesWritten += myAObjCur->second[myAObjIndex].first + len;
-				return true;
+				if (delim && myAObjCur)
+				{
+					if(!myStream->write(myAObjCur->second[myAObjIndex].second,
+										  myAObjCur->second[myAObjIndex].first))
+						res = false;
+					myAObjIndex = (myAObjIndex + 1)%myAObjCur->first;
+					myBytesWritten += myAObjCur->second[myAObjIndex].first + len;
+				}
+				myStream->write("\"", 1);
+				myBytesWritten++;
+				for (int i = 0; i < len; i++) {
+					// write the string 
+					if (blen > 127) {
+						if (!myStream->write(buffer, blen))
+							res = false;
+						myBytesWritten += blen;
+						blen = 0;
+					}
+					switch(data[i]) {
+						case '\"':
+							buffer[blen++] = '\\';
+							buffer[blen++] = '\"';
+							break;
+						case '\\':
+							buffer[blen++] = '\\';
+							buffer[blen++] = '\\';
+							break;
+						case '/':
+							buffer[blen++] = '\\';
+							buffer[blen++] = '/';
+							break;
+						case '\b':
+							buffer[blen++] = '\\';
+							buffer[blen++] = 'b';
+							break;
+						case '\f':
+							buffer[blen++] = '\\';
+							buffer[blen++] = 'f';
+							break;
+						case '\n':
+							buffer[blen++] = '\\';
+							buffer[blen++] = 'n';
+							break;
+						case '\r':
+							buffer[blen++] = '\\';
+							buffer[blen++] = 'r';
+							break;
+						case '\t':
+							buffer[blen++] = '\\';
+							buffer[blen++] = 't';
+							break;
+						default:
+							buffer[blen++] = data[i];
+					}
+				}
+				if (blen > 0) {
+					if(!myStream->write(buffer, blen))
+						res = false;
+					myBytesWritten += blen;
+				}
+				myStream->write("\"", 1);
+				myBytesWritten++;
 			}
-			return false;
+			return res;
 		}
 
 		template <typename T>
-		bool 	writeValue(const char *f, T v)
+		bool 	writeValue(const char *f, T v, bool delim = true)
 		{
 			char buffer[128];
-			int len = myAObjCur->second[myAObjIndex].first;
-			strncpy(buffer, myAObjCur->second[myAObjIndex].second, len);
-			len += snprintf(buffer+len, 127-len, f, v);
-			myAObjIndex = (myAObjIndex + 1)%myAObjCur->first;
+			int len = 0;
+			if (delim && myAObjCur)
+			{
+				len = myAObjCur->second[myAObjIndex].first;
+				strncpy(buffer, myAObjCur->second[myAObjIndex].second, len);
+				myAObjIndex = (myAObjIndex + 1)%myAObjCur->first;
+			}
 
+			len += snprintf(buffer+len, 127-len, f, v);
 			if (len < 128 && myStream && myStream->write(buffer, len))
 			{
 				myBytesWritten += len;
@@ -388,18 +523,19 @@ namespace abJSON
 
 		bool popAObj()
 		{
-			if (myAObjStack->size() > 0)
+			if (myAObjStack.size() > 0)
 			{
-				myAObjStack->pop_back();
-				if (myAObjStack->back() == 0)
+				myAObjStack.pop_back();
+				if (myAObjStack.back() == 0)
 				{
 					myAObjCur = &ASCIIArrayDelim;
+					myAObjIndex = 0;
 				}
 				else
 				{
 					myAObjCur = &ASCIIMapDelim;
+					myAObjIndex = 1;
 				}
-				myAObjIndex = 0;
 				return true;
 			}
 			return false;
@@ -407,7 +543,7 @@ namespace abJSON
 
 		// BINARY:
 
-		bool 	writeJtype(JTYPE t)
+		bool 	writeJType(JTYPE t)
 		{
 			static_assert(sizeof(JTYPE) == sizeof(char), "wrong size for JTYPE");
 			if (myStream && myStream->write((const char *)&t, sizeof(JTYPE)))
@@ -429,9 +565,19 @@ namespace abJSON
 			return false;
 		}
 
-		bool 	writeBString()
+		bool 	writeBString(const char* data, size_t len)
 		{
+			if (myStream && myStream->write(data, len))
+			{
+				myBytesWritten += len;
+				return true;
+			}
+			return false;
+		}
 
+		template <typename T>
+		bool isSmallInt(T v) {
+			return std::numeric_limits<T>::min() < v && v < std::numeric_limits<T>::max();
 		}
 	};
 }
