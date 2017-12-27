@@ -30,7 +30,8 @@ namespace abJSON
 		using real64_t = double;
 		enum errorState {
 			NO_ERROR = 0,
-			INVALID_INPUT
+			STREAM_ERROR,
+			BAD_INPUT
 		};
 
 		jWriter(STREAM_T *stream=nullptr)
@@ -65,34 +66,43 @@ namespace abJSON
 
 		/// @{
 		/// Standard JSON object types
-		bool    null()
+		void    null()
 		{
 			if (BINARY)
 			{
-				return writeJType(JTYPE::JNULL);
+				writeJType(JTYPE::JNULL);
 			}
-			return writeValue("null", nullptr);
+			else
+			{
+				writeValue("null", nullptr);
+			}
 		}
-		bool    boolean(bool v)
+		void    boolean(bool v)
 		{
 			if (BINARY)
 			{
 				if (v)
 				{
-					return writeJType(JTYPE::JTRUE);
+					writeJType(JTYPE::JTRUE);
 				}
-				return writeJType(JTYPE::JFALSE);
+				else
+				{
+					writeJType(JTYPE::JFALSE);
+				}
 			}
 			else
 			{
 				if (v)
 				{
-					return writeValue("true", nullptr);
+					writeValue("true", nullptr);
 				}
-				return writeValue("false", nullptr);
+				else
+				{
+				writeValue("false", nullptr);
+				}
 			}
 		}
-		bool    number(int32_t v)
+		void    number(int32_t v)
 		{
 			if (BINARY)
 			{
@@ -100,53 +110,78 @@ namespace abJSON
 				{
 					if (isSmallInt<int8_t>(v))
 					{
-						return writeJType(JTYPE::JINT8)
-						       && writeBData(static_cast<int8_t>(v)); 
+						writeJType(JTYPE::JINT8);
+						writeBData(static_cast<int8_t>(v)); 
 					}
-					return writeJType(JTYPE::JINT16)
-						   && writeBData(static_cast<int16_t>(v));
+					else
+					{
+						writeJType(JTYPE::JINT16);
+						writeBData(static_cast<int16_t>(v));
+					}
 				}
-				return writeJType(JTYPE::JINT32) && writeBData(v);
+				else
+				{
+					writeJType(JTYPE::JINT32);
+					writeBData(v);
+				}
 			}
-			return writeValue("%" PRId32, v);
+			else
+			{
+				writeValue("%" PRId32, v);
+			}
 		}
-		bool    number(int64_t v)
+		void    number(int64_t v)
 		{
 			if (BINARY)
 			{
 				if (isSmallInt<int32_t>(v))
 				{
-					return number(static_cast<int32_t>(v));	
+					number(static_cast<int32_t>(v));	
 				}
-				return writeJType(JTYPE::JINT64) && writeBData(v);
+				else
+				{
+					writeJType(JTYPE::JINT64);
+					writeBData(v);
+				}
 			}
-			return writeValue("%" PRId64, v);
+			else
+			{
+				writeValue("%" PRId64, v);
+			}
 		}
-		bool    number(real32_t v)
+		void    number(real32_t v)
 		{
 			if (BINARY)
 			{
-				return writeJType(JTYPE::JREAL32) && writeBData(v);
+				writeJType(JTYPE::JREAL32);
+				writeBData(v);
 			}
-			return writeValue("%g", v);
+			else
+			{
+				writeValue("%g", v);
+			}
 		}
-		bool    number(real64_t v)
+		void    number(real64_t v)
 		{
 			if (BINARY)
 			{
-				return writeJType(JTYPE::JREAL64) && writeBData(v); 
+				writeJType(JTYPE::JREAL64);
+				writeBData(v); 
 			}
-			return writeValue("%g", v);
+			else
+			{
+				writeValue("%g", v);
+			}
 		}
-		bool    key(const char *v, int64_t len=-1)
+		void    key(const char *v, int64_t len=-1)
 		{
-			return string(v, len);
+			string(v, len);
 		}
-		bool    keyToken(const char *v, int64_t len=-1)
+		void    keyToken(const char *v, int64_t len=-1)
 		{
-			return stringToken(v, len);
+			stringToken(v, len);
 		}
-		bool    string(const char *v, int64_t len=-1)
+		void    string(const char *v, int64_t len=-1)
 		{
 			if (len == -1)
 			{
@@ -154,13 +189,16 @@ namespace abJSON
 			}
 			if (BINARY)
 			{
-				return writeJType(JTYPE::JSTRING)
-					   && number(len)
-					   && writeBString(v, len);
+				writeJType(JTYPE::JSTRING);
+				number(len);
+				writeBString(v, len);
 			}
-			return writeString(v, len);
+			else
+			{
+				writeString(v, len);
+			}
 		}
-		bool    stringToken(const char *v, int64_t len=-1)
+		void    stringToken(const char *v, int64_t len=-1)
 		{
 			if (len == -1)
 			{
@@ -173,233 +211,271 @@ namespace abJSON
 				{
 					strTokens[v] = strCount;
 					strCount++;
-					return writeJType(JTYPE::JTOKENDEF)
-						   && number(strCount-1)
-						   && string(v, len);
+					writeJType(JTYPE::JTOKENDEF);
+					number(strCount-1);
+					string(v, len);
 				}
 				else
 				{
-					return writeJType(JTYPE::JTOKENREF)
-						   && number(search->second);
+					writeJType(JTYPE::JTOKENREF);
+					number(search->second);
 				}
 			}
-			return string(v, len);
+			else
+			{
+				string(v, len);
+			}
 		}
 		/// @}
 
 		/// @{
-		bool    beginArray()
+		void    beginArray()
 		{
 			if (BINARY)
 			{
-				return writeJType(JTYPE::JARRAY_BEGIN);
+				writeJType(JTYPE::JARRAY_BEGIN);
 			}
-			bool res = writeValue("[", nullptr);
-			myAObjStack.push_back(0);
-			myAObjCur = &ASCIIArrayDelim;
-			myAObjIndex = 1;
-			return res;
+			else
+			{
+				writeValue("[", nullptr);
+				myAObjStack.push_back(0);
+				myAObjCur = &ASCIIArrayDelim;
+				myAObjIndex = 1;
+			}
 		}
-		bool    endArray()
+		void    endArray()
 		{
 			if (BINARY)
 			{
-				return writeJType(JTYPE::JARRAY_END);
+				writeJType(JTYPE::JARRAY_END);
 			}
-			return writeValue("]", nullptr, false) && popAObj();
+			else
+			{
+				writeValue("]", nullptr, false);
+				popAObj();
+			}
 		}
-		bool    beginMap()
+		void    beginMap()
 		{
 			if (BINARY)
 			{
 				return writeJType(JTYPE::JMAP_BEGIN);
 			}
-			bool res = writeValue("{", nullptr);
-			myAObjStack.push_back(1);
-			myAObjCur = &ASCIIMapDelim;
-			myAObjIndex = 3;
-			return res;
+			else
+			{
+				writeValue("{", nullptr);
+				myAObjStack.push_back(1);
+				myAObjCur = &ASCIIMapDelim;
+				myAObjIndex = 3;
+			}
 		}
-		bool    endMap()
+		void    endMap()
 		{
 			if (BINARY)
 			{
-				return writeJType(JTYPE::JMAP_END);
+				writeJType(JTYPE::JMAP_END);
 			}
-			return writeValue("}", nullptr, false) && popAObj();
+			else
+			{
+				writeValue("}", nullptr, false) && popAObj();
+			}
 		}
 		/// @}
 
 		/// Uniform array interface
-		bool    beginUniformArray(size_t size, JTYPE type)
+		void    beginUniformArray(size_t size, JTYPE type)
 		{
 			if (BINARY) 
 			{
-				return writeJType(JTYPE::JUNIFORM_ARRAY)
-					   && writeJType(type)
-					   && number(size);
+				writeJType(JTYPE::JUNIFORM_ARRAY);
+				writeJType(type);
+				number(size);
 			}
 			return beginArray();
 		}
-		bool    endUniformArray()
+		void    endUniformArray()
 		{
 			if (BINARY)
 			{
-				return true;
+				;
 			}
-			return endArray();
+			else
+			{
+				endArray();
+			}
 		}
 
 		/// @{
 		/// Write data to a uniform array
-		bool    uniformBoolean(bool v)
+		void    uniformBoolean(bool v)
 		{
 			if (BINARY)
 			{
-				return boolean;
+				writeBData(v);
 			}
-			return boolean(v);
+			else
+			{
+				boolean(v);
+			}
 		}
-		bool    uniformNumber(int8_t v)
+		void    uniformNumber(int8_t v)
 		{
 			if (BINARY)
 			{
-				return writeBData(v);
+				writeBData(v);
 			}
-			return number(static_cast<int32_t>(v));
+			else
+			{
+				number(static_cast<int32_t>(v));
+			}
 		}
-		bool    uniformNumber(int16_t v)
+		void    uniformNumber(int16_t v)
 		{
 			if (BINARY)
 			{
-				return writeBData(v);
+				writeBData(v);
 			}
-			return number(static_cast<int32_t>(v));
+			else
+			{
+				number(static_cast<int32_t>(v));
+			}
 		}
-		bool    uniformNumber(int32_t v)
+		void    uniformNumber(int32_t v)
 		{
 			if (BINARY)
 			{
-				// if (v < )
-				return writeBData(v);
+				writeBData(v);
 			}
-			return number(v);
+			else
+			{
+				number(v);
+			}
 		}
-		bool    uniformNumber(int64_t v)
+		void    uniformNumber(int64_t v)
 		{
 			if (BINARY)
 			{
-				return writeBData(v);
+				writeBData(v);
 			}
-			return number(v);
+			else
+			{
+				number(v);
+			}
 		}
-		bool    uniformNumber(real32_t v)
+		void    uniformNumber(real32_t v)
 		{
 			if (BINARY)
 			{
-				return writeBData(v);
+				writeBData(v);
 			}
-			return number(v);
+			else
+			{
+				number(v);
+			}
 		}
-		bool    uniformNumber(real64_t v)
+		void    uniformNumber(real64_t v)
 		{
 			if (BINARY)
 			{
-				return writeBData(v);
+				writeBData(v);
 			}
-			return number(v);
+			else
+			{
+				number(v);
+			}
 		}
-		bool    unfiromString(const char *v, int64_t len=-1)
+		void    unfiromString(const char *v, int64_t len=-1)
 		{
+			if (len == -1)
+			{
+				len = strlen(v);
+			}
 			if (BINARY)
 			{
-				if (len == -1)
-				{
-					len = strlen(v);
-				}
-				return number(len) && writeBData(v);
+				number(len);
+				writeBString(v, len);
 			}
-			return string(v, len);
+			else
+			{
+				string(v, len);
+			}
 		}
 		/// @}
 
 		/// @{
 		/// Convenience method to write a uniform array in one shot
-		bool    uniformArray(size_t size, const bool *array)
+		void    uniformArray(size_t size, const bool *array)
 		{
-			bool res = true;
-			res = res && beginUniformArray(size, JTYPE::JBOOL);
+			beginUniformArray(size, JTYPE::JBOOL);
 			for (int i = 0; i < size; ++i)
 			{
-				res = res && uniformBoolean(array[i]);
+				uniformBoolean(array[i]);
 			}
-			return res && endUniformArray();
+			endUniformArray();
 		}
-		bool    uniformArray(size_t size, const int8_t *array)
+		void    uniformArray(size_t size, const int8_t *array)
 		{
-			bool res = true;
-			res = res && beginUniformArray(size, JTYPE::JINT8);
+			beginUniformArray(size, JTYPE::JINT8);
 			for (int i = 0; i < size; ++i)
 			{
-				res = res && uniformNumber(array[i]);
+				uniformNumber(array[i]);
 			}
-			return res && endUniformArray();
+			endUniformArray();
 		}
-		bool    uniformArray(size_t size, const int16_t *array)
+		void    uniformArray(size_t size, const int16_t *array)
 		{
-			bool res = true;
-			res = res && beginArray(size, JTYPE::JINT16);
+			beginArray(size, JTYPE::JINT16);
 			for (int i = 0; i < size; ++i)
 			{
-				res = res && uniformNumber(array[i]);
+				uniformNumber(array[i]);
 			}
-			return res && endUniformArray();
+			endUniformArray();
 		}
-		bool    uniformArray(size_t size, const int32_t *array)
+		void    uniformArray(size_t size, const int32_t *array)
 		{
-			bool res = true;
-			res = res && beginArray(size, JTYPE::JINT32);
+			beginArray(size, JTYPE::JINT32);
 			for (int i = 0; i < size; ++i)
 			{
-				res = res && uniformNumber(array[i]);
+				uniformNumber(array[i]);
 			}
-			return res && endUniformArray();
+			endUniformArray();
 		}
-		bool    uniformArray(size_t size, const int64_t *array)
+		void    uniformArray(size_t size, const int64_t *array)
 		{
-			bool res = true;
-			res = res && beginArray(size, JTYPE::JINT64);
+			beginArray(size, JTYPE::JINT64);
 			for (int i = 0; i < size; ++i)
 			{
-				res = res && (array[i]);
+				uniformArray(array[i]);
 			}
-			return res && endUniformArray();
+			endUniformArray();
 		}
-		bool    uniformArray(size_t size, const real32_t *array)
+		void    uniformArray(size_t size, const real32_t *array)
 		{
-			bool res = true;
-			res = res && beginArray(size, JTYPE::JREAL32);
+			beginArray(size, JTYPE::JREAL32);
 			for (int i = 0; i < size; ++i)
 			{
-				res = res && uniformArray(array[i]);
+				uniformArray(array[i]);
 			}
-			return res && endUniformArray();
+			endUniformArray();
 		}
-		bool    uniformArray(size_t size, const real64_t *array)
+		void    uniformArray(size_t size, const real64_t *array)
 		{
-			bool res = true;
-			res = res && beginArray(size, JTYPE::JREAL64);
+			beginArray(size, JTYPE::JREAL64);
 			for (int i = 0; i < size; ++i)
 			{
-				res = res && uniformArray(array[i]);
+				uniformArray(array[i]);
 			}
-			return res && endUniformArray();
+			endUniformArray();
 		}
 		/// @}
 
-		/// State Functions
+		/// State Functions 
 		errorState getErrorState() {
 			return myErrorState;
+		}
+
+		void clear() {
+			myErrorState = NO_ERROR;
 		}
 
 		explicit operator bool(){
@@ -409,7 +485,7 @@ namespace abJSON
 	private:
 		STREAM_T        *myStream;
 		size_t			myBytesWritten;
-		int myErrorState;
+		int				myErrorState;
 
 		// ASCII:
 
