@@ -257,6 +257,10 @@ namespace abJSON
 		}
 		void    beginMap()
 		{
+			if (myAObjCur != ASCIIArrayDelim)
+			{
+				myErrorState = BAD_INPUT;
+			}
 			if (BINARY)
 			{
 				return writeJType(JTYPE::JMAP_BEGIN);
@@ -271,13 +275,20 @@ namespace abJSON
 		}
 		void    endMap()
 		{
-			if (BINARY)
+			if (myAObjCur != ASCIIMapDelim || myAObjIndex == 1)
 			{
-				writeJType(JTYPE::JMAP_END);
+				myErrorState = BAD_INPUT;
 			}
 			else
 			{
-				writeValue("}", nullptr, false) && popAObj();
+				if (BINARY)
+				{
+					writeJType(JTYPE::JMAP_END);
+				}
+				else
+				{
+					writeValue("}", nullptr, false) && popAObj();
+				}
 			}
 		}
 		/// @}
@@ -503,7 +514,7 @@ namespace abJSON
 		int strCount = 0;
 		std::map<std::string, int> strTokens;
 
-		bool 	writeString(const char *data, size_t len, bool delim=true)
+		void 	writeString(const char *data, size_t len, bool delim=true)
 		{
 			char buffer[128];
 			int blen = 0;
@@ -512,19 +523,20 @@ namespace abJSON
 			{
 				if (delim && myAObjCur)
 				{
-					if(!myStream->write(myAObjCur->second[myAObjIndex].second,
-										  myAObjCur->second[myAObjIndex].first))
-						res = false;
+					sprintf(buffer, myAObjCur->second[myAObjIndex].second);
+					blen += myAObjCur->second[myAObjIndex].first;
 					myAObjIndex = (myAObjIndex + 1)%myAObjCur->first;
-					myBytesWritten += myAObjCur->second[myAObjIndex].first + len;
 				}
-				myStream->write("\"", 1);
-				myBytesWritten++;
+				sprintf(buffer+blen, "\"");
+				blen++;
 				for (int i = 0; i < len; i++) {
 					// write the string 
 					if (blen > 127) {
 						if (!myStream->write(buffer, blen))
-							res = false;
+						{
+							myErrorState = STREAM_ERROR;
+							return;
+						}
 						myBytesWritten += blen;
 						blen = 0;
 					}
@@ -567,13 +579,23 @@ namespace abJSON
 				}
 				if (blen > 0) {
 					if(!myStream->write(buffer, blen))
-						res = false;
+					{
+						myErrorState = STREAM_ERROR;
+						return;
+					}
 					myBytesWritten += blen;
 				}
-				myStream->write("\"", 1);
+				if (!myStream->write("\"", 1))
+				{
+					myErrorState = STREAM_ERROR;
+					return;
+				}
 				myBytesWritten++;
 			}
-			return res;
+			else
+			{
+				myErrorState = STREAM_ERROR;
+			}
 		}
 
 		template <typename T>
@@ -589,12 +611,21 @@ namespace abJSON
 			}
 
 			len += snprintf(buffer+len, 127-len, f, v);
-			if (len < 128 && myStream && myStream->write(buffer, len))
+			if (len < 128)
 			{
-				myBytesWritten += len;
-				return true;
+				if (myStream && myStream->write(buffer, len))
+				{
+					myBytesWritten += len;
+				}
+				else
+				{
+					myErrorState = STREAM_ERROR;
+				}
 			}
-			return false;
+			else
+			{
+				myEerrorState = BAD_INPUT;
+			}
 		}
 
 		bool popAObj()
@@ -612,22 +643,22 @@ namespace abJSON
 					myAObjCur = &ASCIIMapDelim;
 					myAObjIndex = 1;
 				}
-				return true;
 			}
-			return false;
 		}
 
 		// BINARY:
 
-		bool 	writeJType(JTYPE t)
+		void 	writeJType(JTYPE t)
 		{
 			static_assert(sizeof(JTYPE) == sizeof(char), "wrong size for JTYPE");
 			if (myStream && myStream->write((const char *)&t, sizeof(JTYPE)))
 			{
 				myBytesWritten++;
-				return true;
 			}
-			return false;
+			else
+			{
+				myErrorState = STREAM_ERROR;
+			}
 		}
 
 		template <typename T>
