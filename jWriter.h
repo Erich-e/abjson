@@ -34,7 +34,7 @@ namespace abJSON
 			BAD_INPUT
 		};
 
-		jWriter(STREAM_T *stream=nullptr)
+		jWriter(STREAM_T *stream=nullptr, bool prettyPrint=false)
 			: myStream(stream)
 			, myBytesWritten(0)
 			, myErrorState(NO_ERROR)
@@ -42,6 +42,7 @@ namespace abJSON
 			, ASCIIMapDelim(2, jData::getMapDelimiter())
 			, myAObjCur(nullptr)
 			, myAObjIndex(0)
+			, prettyPrint(prettyPrint)
 			, strCount(0)
 		{
 			if (BINARY)
@@ -49,6 +50,8 @@ namespace abJSON
 				writeJType(JTYPE::JMAGIC);
 			}
 		}
+		jWriter(const jWriter &other) = delete;
+		jWriter &operator=(const jWriter &other) = delete;
 		~jWriter()
 		{
 			delete[] ASCIIArrayDelim.second;
@@ -241,6 +244,7 @@ namespace abJSON
 				myAObjStack.push_back(0);
 				myAObjCur = &ASCIIArrayDelim;
 				myAObjIndex = 1;
+				indentLevel++;
 			}
 		}
 		void    endArray()
@@ -251,13 +255,15 @@ namespace abJSON
 			}
 			else
 			{
+				indentLevel--;
+				newLine();
 				writeValue("]", nullptr, false);
 				popAObj();
 			}
 		}
 		void    beginMap()
 		{
-			if (myAObjCur != ASCIIArrayDelim)
+			if (myAObjCur != &ASCIIArrayDelim)
 			{
 				myErrorState = BAD_INPUT;
 			}
@@ -270,12 +276,13 @@ namespace abJSON
 				writeValue("{", nullptr);
 				myAObjStack.push_back(1);
 				myAObjCur = &ASCIIMapDelim;
-				myAObjIndex = 3;
+				myAObjIndex = 2;
+				indentLevel++;
 			}
 		}
 		void    endMap()
 		{
-			if (myAObjCur != ASCIIMapDelim || myAObjIndex == 1)
+			if (myAObjCur != &ASCIIMapDelim || myAObjIndex == 1)
 			{
 				myErrorState = BAD_INPUT;
 			}
@@ -287,7 +294,9 @@ namespace abJSON
 				}
 				else
 				{
-					writeValue("}", nullptr, false) && popAObj();
+					writeValue("}", nullptr, false);
+					popAObj();
+					indentLevel--;
 				}
 			}
 		}
@@ -494,9 +503,9 @@ namespace abJSON
 		}
 
 	private:
-		STREAM_T        *myStream;
-		size_t			myBytesWritten;
-		int				myErrorState;
+		STREAM_T        		*myStream;
+		size_t					myBytesWritten;
+		int						myErrorState;
 
 		// ASCII:
 
@@ -506,9 +515,12 @@ namespace abJSON
 		const DelimeterItem 	ASCIIMapDelim;// (2, ((2, ": "), (2, ", "), (0, "")));
 
 		// 0 for array, 1 for map
-		std::vector<int> 			myAObjStack;
-		const DelimeterItem			*myAObjCur;
-		int 						myAObjIndex;
+		std::vector<int> 		myAObjStack;
+		const DelimeterItem		*myAObjCur;
+		int 					myAObjIndex;
+
+		bool 					prettyPrint;
+		int 					indentLevel;
 
 		// BINARY
 		int strCount = 0;
@@ -518,16 +530,21 @@ namespace abJSON
 		{
 			char buffer[128];
 			int blen = 0;
-			bool res = true;
 			if (myStream)
 			{
 				if (delim && myAObjCur)
 				{
-					sprintf(buffer, myAObjCur->second[myAObjIndex].second);
+					sprintf(buffer, "%s", myAObjCur->second[myAObjIndex].second);
 					blen += myAObjCur->second[myAObjIndex].first;
 					myAObjIndex = (myAObjIndex + 1)%myAObjCur->first;
+					if (prettyPrint && (myAObjCur == &ASCIIArrayDelim || myAObjIndex == 1))
+					{
+						addNewLineToBuffer(buffer + blen);
+						blen += 2*indentLevel + 1;
+					}
 				}
 				sprintf(buffer+blen, "\"");
+				std::cout << "string" << blen << std::endl;
 				blen++;
 				for (int i = 0; i < len; i++) {
 					// write the string 
@@ -599,7 +616,7 @@ namespace abJSON
 		}
 
 		template <typename T>
-		bool 	writeValue(const char *f, T v, bool delim = true)
+		void 	writeValue(const char *f, T v, bool delim = true)
 		{
 			char buffer[128];
 			int len = 0;
@@ -608,8 +625,13 @@ namespace abJSON
 				len = myAObjCur->second[myAObjIndex].first;
 				strncpy(buffer, myAObjCur->second[myAObjIndex].second, len);
 				myAObjIndex = (myAObjIndex + 1)%myAObjCur->first;
+				if (prettyPrint && (myAObjCur == &ASCIIArrayDelim || myAObjIndex == 1))
+				{
+					addNewLineToBuffer(buffer + len);
+					len += 2*indentLevel + 1;
+				}
 			}
-
+			std::cout << "value" << len << std::endl;
 			len += snprintf(buffer+len, 127-len, f, v);
 			if (len < 128)
 			{
@@ -624,11 +646,11 @@ namespace abJSON
 			}
 			else
 			{
-				myEerrorState = BAD_INPUT;
+				myErrorState = BAD_INPUT;
 			}
 		}
 
-		bool popAObj()
+		void popAObj()
 		{
 			if (myAObjStack.size() > 0)
 			{
@@ -643,6 +665,31 @@ namespace abJSON
 					myAObjCur = &ASCIIMapDelim;
 					myAObjIndex = 1;
 				}
+			}
+		}
+
+		void addNewLineToBuffer(char *buffer)
+		{
+			buffer[0] = '\n';
+			for (int i = 0; i < indentLevel; i++)
+			{
+				buffer[2*i+1] = ' ';
+				buffer[2*i+2] = ' ';
+			}
+		}
+
+		void newLine()
+		{
+			char buffer[128];
+			int len = 2*indentLevel + 1;
+			addNewLineToBuffer(buffer);
+			if (myStream && myStream->write(buffer, len))
+			{
+				myBytesWritten += len;
+			}
+			else
+			{
+				myErrorState = STREAM_ERROR;
 			}
 		}
 
@@ -662,24 +709,28 @@ namespace abJSON
 		}
 
 		template <typename T>
-		bool 	writeBData(T v)
+		void 	writeBData(T v)
 		{
 			if (myStream && myStream->write((const char *)&v, sizeof(v)))
 			{
 				myBytesWritten += sizeof(v);
-				return true;
 			}
-			return false;
+			else
+			{
+				myErrorState = STREAM_ERROR;
+			}
 		}
 
-		bool 	writeBString(const char* data, size_t len)
+		void 	writeBString(const char* data, size_t len)
 		{
 			if (myStream && myStream->write(data, len))
 			{
 				myBytesWritten += len;
-				return true;
 			}
-			return false;
+			else
+			{
+				myErrorState = STREAM_ERROR;
+			}
 		}
 
 		template <typename T>
