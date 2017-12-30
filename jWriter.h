@@ -48,12 +48,18 @@ namespace abJSON
 			if (BINARY)
 			{
 				writeJType(JTYPE::JMAGIC);
+				writeBData(0x624a534e);
 			}
 		}
 		jWriter(const jWriter &other) = delete;
 		jWriter &operator=(const jWriter &other) = delete;
 		~jWriter()
 		{
+			if (prettyPrint && !(BINARY))
+			{
+				//End files with a newline
+				newLine();
+			}
 			delete[] ASCIIArrayDelim.second;
 			delete[] ASCIIMapDelim.second;
 		}
@@ -193,7 +199,7 @@ namespace abJSON
 			if (BINARY)
 			{
 				writeJType(JTYPE::JSTRING);
-				number(len);
+				writeLength(len);
 				writeBString(v, len);
 			}
 			else
@@ -215,8 +221,9 @@ namespace abJSON
 					strTokens[v] = strCount;
 					strCount++;
 					writeJType(JTYPE::JTOKENDEF);
-					number(strCount-1);
-					string(v, len);
+					writeLength(strCount-1);
+					writeLength(len);
+					writeBString(v, len);
 				}
 				else
 				{
@@ -255,6 +262,10 @@ namespace abJSON
 			}
 			else
 			{
+				if (myAObjCur != &ASCIIArrayDelim)
+				{
+					myErrorState = BAD_INPUT;
+				}
 				indentLevel--;
 				newLine();
 				writeValue("]", nullptr, false);
@@ -263,10 +274,6 @@ namespace abJSON
 		}
 		void    beginMap()
 		{
-			if (myAObjCur != &ASCIIArrayDelim)
-			{
-				myErrorState = BAD_INPUT;
-			}
 			if (BINARY)
 			{
 				return writeJType(JTYPE::JMAP_BEGIN);
@@ -282,22 +289,20 @@ namespace abJSON
 		}
 		void    endMap()
 		{
-			if (myAObjCur != &ASCIIMapDelim || myAObjIndex == 1)
+			if (BINARY)
 			{
-				myErrorState = BAD_INPUT;
+				writeJType(JTYPE::JMAP_END);
 			}
 			else
 			{
-				if (BINARY)
-				{
-					writeJType(JTYPE::JMAP_END);
+				if (myAObjCur != &ASCIIMapDelim || myAObjIndex == 1)
+				{		
+					myErrorState = BAD_INPUT;
 				}
-				else
-				{
-					writeValue("}", nullptr, false);
-					popAObj();
-					indentLevel--;
-				}
+				indentLevel--;
+				newLine();
+				writeValue("}", nullptr, false);
+				popAObj();
 			}
 		}
 		/// @}
@@ -309,7 +314,7 @@ namespace abJSON
 			{
 				writeJType(JTYPE::JUNIFORM_ARRAY);
 				writeJType(type);
-				number(size);
+				writeLength(size);
 			}
 			return beginArray();
 		}
@@ -544,7 +549,6 @@ namespace abJSON
 					}
 				}
 				sprintf(buffer+blen, "\"");
-				std::cout << "string" << blen << std::endl;
 				blen++;
 				for (int i = 0; i < len; i++) {
 					// write the string 
@@ -631,7 +635,6 @@ namespace abJSON
 					len += 2*indentLevel + 1;
 				}
 			}
-			std::cout << "value" << len << std::endl;
 			len += snprintf(buffer+len, 127-len, f, v);
 			if (len < 128)
 			{
@@ -733,8 +736,31 @@ namespace abJSON
 			}
 		}
 
-		template <typename T>
-		bool isSmallInt(T v) {
+		void writeLength(int64_t len)
+		{
+			if (len < 0xf1)
+			{
+				writeBData(static_cast<int8_t>(len));
+			}
+			else if (len < 0xffff)
+			{
+				writeBData(0xf2);
+				writeBData(static_cast<int16_t>(len));
+			}
+			else if (len > 0xffffffff)
+			{
+				writeBData(0xf4);
+				writeBData(static_cast<int32_t>(len));
+			}
+			else
+			{
+				writeBData(0xf8);
+				writeBData(len);
+			}
+		}
+
+		template <typename T, typename VALUE_T>
+		bool isSmallInt(VALUE_T v) {
 			return std::numeric_limits<T>::min() < v && v < std::numeric_limits<T>::max();
 		}
 	};
