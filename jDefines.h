@@ -1,4 +1,5 @@
-
+#ifndef __AbJSONDEFINES__
+#define __AbJSONDEFINES__
 namespace abJSON
 {
     enum class JTYPE : char
@@ -97,3 +98,4 @@ namespace abJSON
 		JMAGIC             = 0x7f,
 	};
 }
+#endif

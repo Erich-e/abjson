@@ -1,5 +1,6 @@
 #include "jDefines.h"
 #include <inttypes.h>
+#include <cstring>
 #include <limits>
 #include <map>
 #include <stdint.h>
@@ -499,12 +500,16 @@ namespace abJSON
 			return myErrorState;
 		}
 
+		bool fail() {
+			return myErrorState != NO_ERROR;
+		}
+
 		void clear() {
 			myErrorState = NO_ERROR;
 		}
 
 		explicit operator bool(){
-			return myErrorState != NO_ERROR;
+			return myErrorState == NO_ERROR;
 		}
 
 	private:
@@ -550,7 +555,7 @@ namespace abJSON
 				}
 				sprintf(buffer+blen, "\"");
 				blen++;
-				for (int i = 0; i < len; i++) {
+				for (unsigned int i = 0; i < len; i++) {
 					// write the string 
 					if (blen > 127) {
 						if (!myStream->write(buffer, blen))

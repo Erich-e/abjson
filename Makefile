@@ -1,10 +1,10 @@
 FLAGS=-std=c++11 -Wall -g
 CPP=g++
 
-main:	test.o jWriter.h jDefines.h jData.o
+main:	test.o jWriter.h jReader.h jDefines.h jData.o
 	$(CPP) $(FLAGS) -o main test.o jData.o
 
-test.o:	test.cpp jWriter.h
+test.o:	test.cpp jWriter.h jReader.h
 	$(CPP) $(FLAGS) -c test.cpp
 
 jData.o:	jData.cpp
