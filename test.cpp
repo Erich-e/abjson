@@ -24,19 +24,21 @@ int main(int argc, char* argv[])
 	// w.endMap();
 	// w.endArray();
 
-	w.beginMap();
-	w.string("key");
-	w.string("value");
-	w.string("key2");
-	w.string("value2");
-	w.string("array");
-	w.beginArray();
+	// w.beginMap();
+	// w.string("key");
+	// w.string("value");
+	// w.string("key2");
+	// w.string("value2");
+	// w.string("array");
+	// w.beginArray();
+	// w.number(1);
+	// w.number(-1);
+	// w.number(100);
+	// w.number(10000);
+	// w.endArray();
+	// w.endMap();
+
 	w.number(1);
-	w.number(-1);
-	w.number(100);
-	w.number(10000);
-	w.endArray();
-	w.endMap();
 
 	if(w) {
 		std::cout << "no error\n";

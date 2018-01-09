@@ -116,6 +116,10 @@ namespace abJSON
 							break;
 						case '}':
 							readMapEnd();
+							break;
+						case '-':
+							myStream->get();
+							readASCIINumber(true);
 						case EOF:
 							// end of file
 							myStream->get();
@@ -123,7 +127,7 @@ namespace abJSON
 						default:
 							if (47 < c && c < 58)
 							{
-								readNumber();
+								readASCIINumber(false);
 							}
 							else
 							{
@@ -369,16 +373,17 @@ namespace abJSON
 			myVerb->takeMapEnd();
 		}
 
+		template <typename T>
 		void readNumber()
 		{
-			if (BINARY)
-			{
+			// Binary is assumed
+			T val = 0;
+		}
 
-			}
-			else
-			{
-
-			}
+		void readASCIINumber(bool negative)
+		{
+			// ASCII is assumed
+			;
 		}
 
 		void readLength()
