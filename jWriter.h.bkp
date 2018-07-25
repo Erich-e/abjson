@@ -121,7 +121,7 @@ namespace abJSON
 					if (isSmallInt<int8_t>(v))
 					{
 						writeJType(JTYPE::JINT8);
-						writeBData(static_cast<int8_t>(v)); 
+						writeBData(static_cast<int8_t>(v));
 					}
 					else
 					{
@@ -146,7 +146,7 @@ namespace abJSON
 			{
 				if (isSmallInt<int32_t>(v))
 				{
-					number(static_cast<int32_t>(v));	
+					number(static_cast<int32_t>(v));
 				}
 				else
 				{
@@ -176,7 +176,7 @@ namespace abJSON
 			if (BINARY)
 			{
 				writeJType(JTYPE::JREAL64);
-				writeBData(v); 
+				writeBData(v);
 			}
 			else
 			{
@@ -297,7 +297,7 @@ namespace abJSON
 			else
 			{
 				if (myAObjCur != &ASCIIMapDelim || myAObjIndex == 1)
-				{		
+				{
 					myErrorState = BAD_INPUT;
 				}
 				indentLevel--;
@@ -311,7 +311,7 @@ namespace abJSON
 		/// Uniform array interface
 		void    beginUniformArray(size_t size, JTYPE type)
 		{
-			if (BINARY) 
+			if (BINARY)
 			{
 				writeJType(JTYPE::JUNIFORM_ARRAY);
 				writeJType(type);
@@ -495,7 +495,7 @@ namespace abJSON
 		}
 		/// @}
 
-		/// State Functions 
+		/// State Functions
 		errorState getErrorState() {
 			return myErrorState;
 		}
@@ -520,7 +520,7 @@ namespace abJSON
 		// ASCII:
 
 		using DelimeterItem = std::pair<char, std::pair<int, const char *> *>;
-		
+
 		const DelimeterItem 	ASCIIArrayDelim;// (1, ((2, ", "), (0, "")));
 		const DelimeterItem 	ASCIIMapDelim;// (2, ((2, ": "), (2, ", "), (0, "")));
 
@@ -556,7 +556,7 @@ namespace abJSON
 				sprintf(buffer+blen, "\"");
 				blen++;
 				for (unsigned int i = 0; i < len; i++) {
-					// write the string 
+					// write the string
 					if (blen > 127) {
 						if (!myStream->write(buffer, blen))
 						{
