@@ -1,27 +1,32 @@
 #include "ASCIIJWriter.h"
 #include <inttypes.h>
+#include <iostream>
+#include <stdio.h>
 
 using namespace abJSON;
 
-ASCIIJWriter::ASCIIJWriter(baseStream *std::ostream, bool prettyPrint = true)
-  : myStream(baseStream)
+ASCIIJWriter::ASCIIJWriter(std::ostream *baseStream, bool prettyPrint)
+  : abstractJWriter(baseStream)
   , prettyPrint(prettyPrint)
+  , blen(0)
 {
 
 }
 
-~ASCIIJWriter()
+ASCIIJWriter::~ASCIIJWriter()
 {
-  delete myStream;
 }
 
 void ASCIIJWriter::null()
 {
   writeData("null", nullptr);
+  myState.nextState(JOP::null);
+  writeDelim();
 }
 
 void ASCIIJWriter::boolean(bool v)
 {
+  writeDelim();
   if (v)
   {
     writeData("true", nullptr);
@@ -30,70 +35,90 @@ void ASCIIJWriter::boolean(bool v)
   {
     writeData("false", nullptr);
   }
+  myState.nextState(JOP::boolean);
 }
 
-void ASCIIJWriter::number(int32_t)
+void ASCIIJWriter::number(int32_t v)
 {
-  writeData<int_32>("%" PRId32, v);
+  writeDelim();
+  writeData<int32_t>("%" PRId32, v);
+  myState.nextState(JOP::number);
 }
 
-void ASCIIJWriter::number(int64_t)
+void ASCIIJWriter::number(int64_t v)
 {
-  writeData<int_64>("%" PRId64, v);
+  writeDelim();
+  writeData<int64_t>("%" PRId64, v);
+  myState.nextState(JOP::number);
 }
 
-void ASCIIJWriter::number(real32_t)
+void ASCIIJWriter::number(float v)
 {
-  writeData<real32_t>("%g", v);
+  writeDelim();
+  writeData<float>("%g", v);
+  myState.nextState(JOP::number);
 }
 
-void ASCIIJWriter::number(real64_t)
+void ASCIIJWriter::number(double v)
 {
-  writeData<real_64>("%g", v);
+  writeDelim();
+  writeData<double>("%g", v);
+  myState.nextState(JOP::number);
 }
 
-void ASCIIJWriter::key(const char *v, int64_t len=-1)
+void ASCIIJWriter::key(const char *v, int64_t len)
 {
-  writeString(data, len);
+  writeDelim();
+  writeString(v, len);
+  myState.nextState(JOP::key);
 }
 
-void ASCIIJWriter::string(const char *v, int64_t len=-1)
+void ASCIIJWriter::string(const char *v, int64_t len)
 {
-  writeString(data, len);
+  writeDelim();
+  writeString(v, len);
+  myState.nextState(JOP::string);
 }
 
 void ASCIIJWriter::beginArray()
 {
+  writeDelim();
   writeData("[", nullptr);
+  myState.nextState(JOP::beginArray);
 }
 
 void ASCIIJWriter::endArray()
 {
+  writeDelim();
   writeData("]", nullptr);
+  myState.nextState(JOP::endArray);
 }
 
 void ASCIIJWriter::beginMap()
 {
+  writeDelim();
   writeData("{", nullptr);
+  myState.nextState(JOP::beginMap);
 }
 
 void ASCIIJWriter::endMap()
 {
+  writeDelim();
   writeData("}", nullptr);
+  myState.nextState(JOP::endMap);
 }
 
 template <typename T>
 void ASCIIJWriter::writeData(const char *f, T v)
 {
-  len += sprintf(buffer, bufferSize, f, v);
-  myStream->write(buffer, len);
-  myBytesWritten += len;
+  // use pointer arithmetic to avoid overiting the buffer
+  blen += snprintf(buffer+blen, bufferSize, f, v);
   flushBuffer();
 }
 
 void ASCIIJWriter::writeString(const char *data, size_t len)
 {
-  blen += sprintf(buf fer, "\"");
+  blen += sprintf(buffer, "\"");
   for (size_t i = 0; i < len; i++)
   {
     // write the string
@@ -103,37 +128,46 @@ void ASCIIJWriter::writeString(const char *data, size_t len)
     }
     switch(data[i])
     {
-      case "\"":
-      	buffer[blen++] = "\\";
-      	buffer[blen++] = "\"";
-			case "\\":
-				buffer[blen++] = "\\";
-				buffer[blen++] = "\\";
-			case "/":
-				buffer[blen++] = "\\";
-				buffer[blen++] = "/";
-			case "\b":
-				buffer[blen++] = "\\";
-				buffer[blen++] = "b";
-			case "\f":
-				buffer[blen++] = "\\";
-				buffer[blen++] = "f";
-			case "\n":
-				buffer[blen++] = "\\";
-				buffer[blen++] = "n";
-			case "\r":
-				buffer[blen++] = "\\";
-				buffer[blen++] = "r";
-			case "\t":
-				buffer[blen++] = "\\";
-				buffer[blen++] = "t";
+      case '\"':
+      	buffer[blen++] = '\\';
+      	buffer[blen++] = '\"';
+        break;
+			case '\\':
+				buffer[blen++] = '\\';
+				buffer[blen++] = '\\';
+        break;
+			case '/':
+				buffer[blen++] = '\\';
+				buffer[blen++] = '/';
+        break;
+			case '\b':
+				buffer[blen++] = '\\';
+				buffer[blen++] = 'b';
+        break;
+			case '\f':
+				buffer[blen++] = '\\';
+				buffer[blen++] = 'f';
+        break;
+			case '\n':
+				buffer[blen++] = '\\';
+				buffer[blen++] = 'n';
+        break;
+			case '\r':
+				buffer[blen++] = '\\';
+				buffer[blen++] = 'r';
+        break;
+			case '\t':
+				buffer[blen++] = '\\';
+				buffer[blen++] = 't';
+        break;
 			default:
 				buffer[blen++] = data[i];
-    }
+  	}
   }
+
 }
 
-void flushBuffer()
+void ASCIIJWriter::flushBuffer()
 {
   if (myStream->write(buffer, blen))
   {
@@ -142,6 +176,24 @@ void flushBuffer()
   }
   else
   {
+    std::cout << "something went wrong" << std::endl;
     ; // TODO: raise a flag here
+  }
+}
+
+void ASCIIJWriter::writeDelim()
+{
+  switch (myState.getState())
+  {
+    // perform a switch on the CURRENT state.
+    case JState::array:
+    case JState::mapValue:
+    // write a comma
+      blen += snprintf(buffer+blen, bufferSize, ",");
+      break;
+    case JState::mapKey:
+    // write a colon
+      blen += snprintf(buffer+blen, bufferSize, ":");
+      break;
   }
 }

@@ -1,14 +1,16 @@
-FLAGS=-std=c++11 -Wall -g
-CPP=g++
+CXX=g++
+CXXFLAGS=-std=c++11 -Wall -g
 
-main:	test.o jWriter.h jReader.h jDefines.h jData.o
-	$(CPP) $(FLAGS) -o main test.o jData.o
+main: test.o abstractJWriter.o ASCIIJWriter.o jState.o
+	$(CXX) $(CXXFLAGS) -o main *.o
 
-test.o:	test.cpp jWriter.h jReader.h
-	$(CPP) $(FLAGS) -c test.cpp
+test.o: ASCIIJWriter.h   
 
-jData.o:	jData.cpp
-	$(CPP) $(FLAGS) -c jData.cpp
+abstractJWriter.o: abstractJWriter.h abstractJWriter.cpp jDefines.h jState.h
+
+ASCIIJWriter.o: ASCIIJWriter.h ASCIIJWriter.cpp abstractJWriter.h jDefines.h 
+
+jState.o: jState.h jState.cpp jDefines.h
 
 clean:
 	rm *.o main

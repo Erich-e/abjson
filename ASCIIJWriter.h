@@ -1,3 +1,5 @@
+#ifndef ABJSON_ASCIIJWRITER
+#define ABJSON_ASCIIJWRITER
 #include "abstractJWriter.h"
 
 namespace abJSON
@@ -7,14 +9,14 @@ namespace abJSON
   private:
     static const int bufferSize = 256;
 
-    char buffer[bufferSize];
-    int blen;
-    bool prettyPrint
+    char          buffer[bufferSize];
+    int           blen;
+    bool          prettyPrint;
 
-    bool error
+    bool          error;
 
   public:
-    ASCIIJWriter(baseStream *std::ostream, bool prettyPrint = true);
+    ASCIIJWriter(std::ostream *baseStream, bool prettyPrint = true);
     ~ASCIIJWriter();
 
     /// abstractJWriter overrides
@@ -22,7 +24,8 @@ namespace abJSON
     void boolean(bool v) override;
     void number(int32_t v) override;
     void number(int64_t v) override;
-    void number(real32_t v) override;
+    void number(float v) override;
+    void number(double v) override;
     void key(const char *v, int64_t len=-1) override;
     void string(const char *v, int64_t len=-1) override;
 
@@ -39,5 +42,8 @@ namespace abJSON
     void writeString(const char *data, size_t len);
     /// flush buffer - used internally
     void flushBuffer();
-  }
+    /// write a delimeter, based on the current state
+    void writeDelim();
+  };
 }
+#endif

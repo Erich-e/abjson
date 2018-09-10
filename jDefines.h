@@ -20,7 +20,7 @@ namespace abJSON
 
 		/// Marks the end of an array object
 		JARRAY_END		= 0x5d,         // ']'
-		
+
 		/// The following byte should be 0 or 1.  However, the use of this
 		/// token to store booleans is less efficient than using
 		/// JFALSE/JTRUE.@n This is primarily for completeness (and
@@ -48,7 +48,7 @@ namespace abJSON
 		JREAL32	    = 0x19,
 		/// The following 8 bytes represent an 64 bit real (float)
 		JREAL64	    = 0x1a,
-		
+
 		/// The data following is a binary encoded string.  The byte is
 		/// followed by an encoded length followed by the bytes representing
 		/// the string (the terminating NULL should not be included).
@@ -97,5 +97,18 @@ namespace abJSON
 		/// loading.
 		JMAGIC             = 0x7f,
 	};
+
+  enum class JOP {
+    // Operations to change state of readers and writers
+    null,
+    boolean,
+    number,
+    key,
+    string,
+    beginArray,
+    endArray,
+    beginMap,
+    endMap,
+  };
 }
 #endif
